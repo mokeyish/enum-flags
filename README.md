@@ -1,3 +1,6 @@
+[![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE-MIT)
+[![Documentation](https://docs.rs/enum-flags/badge.svg)](https://docs.rs/enum-flags)
+[![Crates.io Version](https://img.shields.io/crates/v/enum-flags.svg)](https://crates.io/crates/enum-flags)
 # EnumFlags
 
 > EnumFlags is a [csharp](https://docs.microsoft.com/en-us/dotnet/api/system.flagsattribute?view=net-5.0) like enum flags implementation.
