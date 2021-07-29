@@ -14,7 +14,7 @@
 //!     C = 4
 //! }
 //! fn main() {
-//!     let e1 = Flags::A | Flags::C;
+//!     let e1: Flags = Flags::A | Flags::C;
 //!     let e2 = Flags::B | Flags::C;
 //!
 //!     assert_eq!(e1 | e2, Flags::A | Flags::B | Flags::C); // union
