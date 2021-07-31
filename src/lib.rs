@@ -19,17 +19,18 @@
 //!
 //!     assert_eq!(e1 | e2, Flags::A | Flags::B | Flags::C); // union
 //!     assert_eq!(e1 & e2, Flags::C); // intersection
-//!     assert_eq!(e1 ^ e2, Flags::A | Flags::B); // xor
-//!     assert_eq!(e1 & (!Flags::C), Flags::B); // deletion
-//!     assert_eq!(e1 - Flags::C, Flags::B); // deletion
+//!     assert_eq!(e1 ^ e2, Flags::A | Flags::B); // toggle
+//!     assert_eq!(e1 & (!Flags::C), Flags::A); // deletion
+//!     assert_eq!(e1 - Flags::C, Flags::A); // deletion
 //!
-//!     assert_eq!("(Flags::A | Flags::C)", format!("{:?}", e1).as_str());
+//!     assert_eq!(format!("{:?}", e1).as_str(), "(Flags::A | Flags::C)");
 //!     assert!(e1.has_a());
 //!     assert!(!e1.has_b());
 //!     assert!(e1.has_flag(Flags::C));
-//!
+//!     assert!(e1.contains(Flags::C));
 //! }
 //! ```
+
 
 extern crate proc_macro;
 
@@ -64,7 +65,7 @@ pub fn enum_flags(input: TokenStream) -> TokenStream {
 
 
 fn impl_flags(enum_name: &syn::Ident, enum_items: Vec<&syn::Ident>, num: &syn::Ident, vis: &syn::Visibility) -> proc_macro2::TokenStream {
-    let is_enum_items = enum_items.iter()
+    let has_enum_items = enum_items.iter()
         .map(|x| {
             let mut n = to_snake_case(&x.to_string());
             n.insert_str(0, "has_");
@@ -83,19 +84,33 @@ fn impl_flags(enum_name: &syn::Ident, enum_items: Vec<&syn::Ident>, num: &syn::I
                 "123".to_string()
             }
             #(
-                #vis fn #is_enum_items(&self)-> bool {
+                #vis fn #has_enum_items(&self)-> bool {
                     use #enum_name::*;
-                    self.has_flag(#enum_items)
+                    self.contains(#enum_items)
                 }
             )*
             #vis fn has_flag(&self, flag: Self) -> bool {
-                    let a = *self as #num;
-                    let b = flag as #num;
-                    if a == 0 {
-                        b == 0
-                    } else {
-                        (a & b) != 0
-                    }
+                self.contains(flag)
+            }
+            #vis fn is_empty(&self) -> bool {
+                *self as #num == 0
+            }
+            #vis fn is_all(&self) -> bool {
+                use #enum_name::*;
+                let mut v = Self::from_num(0);
+                #(
+                    v |= #enum_items;
+                )*
+                *self == v
+            }
+            #vis fn contains(&self, flag: Self) -> bool {
+                let a = *self as #num;
+                let b = flag as #num;
+                if a == 0 {
+                    b == 0
+                } else {
+                    (a & b) != 0
+                }
             }
             fn from_num(n: #num) -> Self {
                 unsafe {
@@ -179,7 +194,7 @@ fn impl_flags(enum_name: &syn::Ident, enum_items: Vec<&syn::Ident>, num: &syn::I
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                 let mut v = Vec::new();
                 #(
-                    if self.#is_enum_items() {
+                    if self.#has_enum_items() {
                         v.push(#enum_names)
                     }
                 )*

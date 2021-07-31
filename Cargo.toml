@@ -1,12 +1,15 @@
 [package]
 name = "enum-flags"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2018"
 authors = ["YISH<mokeyish@hotmail.com>"]
 description = "EnumFlags is a csharp like enum flags implementation."
 license="MIT"
-repository = "https://github.com/mokeyish/enum-flags"
 keywords = ["enum", "bitflag", "flag", "bitflags", "enumflags"]
+homepage = "https://github.com/mokeyish/enum-flags"
+repository = "https://github.com/mokeyish/enum-flags"
+documentation = "https://docs.rs/enum-flags"
+
 
 [lib]
 proc-macro = true

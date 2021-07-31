@@ -168,3 +168,75 @@ fn test_deletion(){
     assert_eq!(e1 & (!Flags::C), Flags::A);
     assert_eq!(e1 - Flags::C , Flags::A);
 }
+
+
+#[test]
+fn test_empty(){
+    #[repr(u32)]
+    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    enum Flags{
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4
+    }
+
+    let e1 = Flags::None;
+    assert!(e1.is_empty());
+    assert!(!Flags::A.is_empty());
+    assert!(!(Flags::A | Flags::B).is_empty());
+}
+
+
+#[test]
+fn test_is_all(){
+    #[repr(u32)]
+    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    enum Flags{
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4
+    }
+
+    let e1 = Flags::None;
+    assert!(!e1.is_all());
+
+    let e1 = Flags::A;
+    assert!(!e1.is_all());
+
+    let e1 = Flags::A | Flags::C;
+    assert!(!e1.is_all());
+
+    let e1 = Flags::A | Flags::C | Flags::B;
+    assert!(e1.is_all());
+
+    let e1 = Flags::A | Flags::C | Flags::B | Flags::None;
+    assert!(e1.is_all());
+}
+
+#[test]
+fn test_contains(){
+    #[repr(u32)]
+    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    enum Flags{
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4
+    }
+
+    let e1 = Flags::A;
+    assert!(e1.contains(Flags::A));
+
+    let e1 = Flags::A | Flags::C;
+    assert!(e1.contains(Flags::A));
+
+    let e1 = Flags::A | Flags::C;
+    assert!(!e1.contains(Flags::None));
+
+
+
+    let e1 = Flags::None;
+    assert!(e1.contains(Flags::None));
+}

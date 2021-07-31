@@ -21,17 +21,16 @@ enum Flags{
 fn main() {
     let e1: Flags = Flags::A | Flags::C;
     let e2 = Flags::B | Flags::C;
-    
+
     assert_eq!(e1 | e2, Flags::A | Flags::B | Flags::C); // union
     assert_eq!(e1 & e2, Flags::C); // intersection
-    assert_eq!(e1 ^ e2, Flags::A | Flags::B); // xor
-    assert_eq!(e1 & (!Flags::C), Flags::B); // deletion
-    assert_eq!(e1 - Flags::C, Flags::B); // deletion
+    assert_eq!(e1 ^ e2, Flags::A | Flags::B); // toggle
+    assert_eq!(e1 & (!Flags::C), Flags::A); // deletion
+    assert_eq!(e1 - Flags::C, Flags::A); // deletion
 
-    assert_eq!("(Flags::A | Flags::C)", format!("{:?}", e1).as_str());
+    assert_eq!(format!("{:?}", e1).as_str(), "(Flags::A | Flags::C)");
     assert!(e1.has_a());
     assert!(!e1.has_b());
     assert!(e1.has_flag(Flags::C));
-    
 }
 ```
