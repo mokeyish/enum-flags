@@ -134,7 +134,7 @@ fn impl_flags(enum_name: &syn::Ident, enum_items: Vec<&syn::Ident>, num: &syn::I
             type Output = Self;
             fn bitand(self, rhs: Self) -> Self::Output {
                 let a = self as #num;
-                let b = rhs as #num;
+                let b = rhs.clone() as #num;
                 let c = a & b;
                 Self::from_num(c)
             }
