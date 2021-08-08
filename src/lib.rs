@@ -1,3 +1,5 @@
+#![allow(clippy::needless_doctest_main)]
+
 //!
 //! EnumFlags is a csharp like enum flags implementation.
 //!
@@ -37,7 +39,6 @@ extern crate proc_macro;
 use {
     syn::{DeriveInput, parse_macro_input},
     quote::*,
-    proc_macro2,
     self::proc_macro::TokenStream
 };
 use syn::Data;
@@ -49,7 +50,7 @@ pub fn enum_flags(input: TokenStream) -> TokenStream {
     let enum_name = &ast.ident;
     let num_size = extract_repr(&ast.attrs)
         .unwrap()
-        .unwrap_or(syn::Ident::new("isize", enum_name.span().clone()));
+        .unwrap_or_else(|| syn::Ident::new("isize", enum_name.span()));
     let vis = &ast.vis;
 
     let result = match &ast.data {
@@ -69,7 +70,7 @@ fn impl_flags(enum_name: &syn::Ident, enum_items: Vec<&syn::Ident>, num: &syn::I
         .map(|x| {
             let mut n = to_snake_case(&x.to_string());
             n.insert_str(0, "has_");
-            syn::Ident::new(n.as_str(), enum_name.span().clone())
+            syn::Ident::new(n.as_str(), enum_name.span())
         }).collect::<Vec<syn::Ident>>();
     let enum_names = enum_items.iter()
         .map(|x| {
