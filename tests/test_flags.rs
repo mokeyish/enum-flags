@@ -1,11 +1,13 @@
+#![feature(arbitrary_enum_discriminant)]
 
-use enum_flags::EnumFlags;
+use enum_flags::enum_flags;
 
 
 #[test]
 fn test_bitor(){
 
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum State {
         None= 0,
         A = 1,
@@ -21,7 +23,8 @@ fn test_bitor(){
 #[test]
 fn test_bitor_assign(){
 
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum State {
         None= 0,
         A = 1,
@@ -39,7 +42,8 @@ fn test_bitor_assign(){
 #[test]
 fn test_has_flag(){
 
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum State {
         None= 0,
         A = 1,
@@ -58,7 +62,9 @@ fn test_has_flag(){
 #[test]
 fn test_has_flag2(){
 
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum State {
         None= 0,
         A = 1,
@@ -74,7 +80,8 @@ fn test_has_flag2(){
 #[test]
 fn test_bitand(){
 
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum State {
         None= 0,
         A = 1,
@@ -90,7 +97,8 @@ fn test_bitand(){
 #[test]
 fn test_bitand_assign(){
 
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum State {
         None= 0,
         A = 1,
@@ -106,7 +114,8 @@ fn test_bitand_assign(){
 #[test]
 fn test_union(){
     #[repr(u8)]
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum Flags{
         None = 0,
         A = 1,
@@ -122,7 +131,8 @@ fn test_union(){
 #[test]
 fn test_intersection(){
     #[repr(u8)]
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum Flags{
         None = 0,
         A = 1,
@@ -138,7 +148,8 @@ fn test_intersection(){
 #[test]
 fn test_xor(){
     #[repr(u8)]
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum Flags{
         None = 0,
         A = 1,
@@ -155,7 +166,8 @@ fn test_xor(){
 #[test]
 fn test_deletion(){
     #[repr(u8)]
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum Flags{
         None = 0,
         A = 1,
@@ -165,7 +177,7 @@ fn test_deletion(){
 
 
     let e1 = Flags::A | Flags::C;
-    assert_eq!(e1 & (!Flags::C), Flags::A);
+    assert_eq!(e1 & (!Flags::C), Flags::A.as_num());
     assert_eq!(e1 - Flags::C , Flags::A);
 }
 
@@ -173,7 +185,8 @@ fn test_deletion(){
 #[test]
 fn test_empty(){
     #[repr(u32)]
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum Flags{
         None = 0,
         A = 1,
@@ -191,7 +204,8 @@ fn test_empty(){
 #[test]
 fn test_is_all(){
     #[repr(u32)]
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum Flags{
         None = 0,
         A = 1,
@@ -218,7 +232,8 @@ fn test_is_all(){
 #[test]
 fn test_contains(){
     #[repr(u32)]
-    #[derive(EnumFlags, Copy, Clone, PartialEq)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
     enum Flags{
         None = 0,
         A = 1,

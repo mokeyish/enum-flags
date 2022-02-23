@@ -5,13 +5,18 @@
 
 > EnumFlags is a [csharp](https://docs.microsoft.com/en-us/dotnet/api/system.flagsattribute?view=net-5.0) like enum flags implementation.
 
+
 ## Example
 
+Since use feature `arbitrary_enum_discriminant`, nightly channel is required.
+
 ```rust
-use enum_flags::EnumFlags;
+#![feature(arbitrary_enum_discriminant)]
+use enum_flags::enum_flags;
 
 #[repr(u8)]
-#[derive(EnumFlags, Copy, Clone, PartialEq)]
+#[enum_flags]
+#[derive(Copy, Clone, PartialEq)]
 enum Flags{
     None = 0,
     A = 1,
@@ -32,5 +37,41 @@ fn main() {
     assert!(e1.has_a());
     assert!(!e1.has_b());
     assert!(e1.has_flag(Flags::C));
+    assert!(e1.contains(Flags::C));
+    assert_eq!(match Flags::A | Flags::C {
+        Flags::None => "None",
+        Flags::A => "A",
+        Flags::B => "B",
+        Flags::C => "C",
+        Flags::__Composed__(v) if v == Flags::A | Flags::B => "A and B",
+        Flags::__Composed__(v) if v == Flags::A | Flags::C => "A and C",
+        _ => "Others"
+    }, "A and C")
 }
 ```
+
+
+
+## Breaking Changes
+
+- before version 0.18
+  ```rust
+  #[derive(Copy, EnumFlags, Clone, PartialEq)]
+  enum Flags{
+      None = 0,
+      A = 1,
+      B = 2,
+      C = 4
+  }
+  ```
+- version 0.30 later
+  ```rust
+  #[enum_flags] 
+  #[derive(Copy, Clone, PartialEq)]
+  enum Flags {
+      None = 0,
+      A = 1,
+      B = 2,
+      C = 4
+  }
+  ```

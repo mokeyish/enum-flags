@@ -5,10 +5,12 @@
 //!
 //! # Example
 //! ```rust
-//! use enum_flags::EnumFlags;
+//! #![feature(arbitrary_enum_discriminant)]
+//! use enum_flags::enum_flags;
 //!
 //! #[repr(u8)]
-//! #[derive(EnumFlags, Copy, Clone, PartialEq)]
+//! #[enum_flags]
+//! #[derive(Copy, Clone, PartialEq)]
 //! enum Flags{
 //!     None = 0,
 //!     A = 1,
@@ -30,180 +32,240 @@
 //!     assert!(!e1.has_b());
 //!     assert!(e1.has_flag(Flags::C));
 //!     assert!(e1.contains(Flags::C));
+//!     assert_eq!(match Flags::A | Flags::C {
+//!         Flags::None => "None",
+//!         Flags::A => "A",
+//!         Flags::B => "B",
+//!         Flags::C => "C",
+//!         Flags::__Composed__(v) if v == Flags::A | Flags::B => "A and B",
+//!         Flags::__Composed__(v) if v == Flags::A | Flags::C => "A and C",
+//!         _ => "Others"
+//!     }, "A and C")
 //! }
 //! ```
-
 
 extern crate proc_macro;
 
 use {
     syn::{DeriveInput, parse_macro_input},
     quote::*,
+    proc_macro2::{self, Span},
     self::proc_macro::TokenStream
 };
-use syn::Data;
+use syn::{Attribute, AttrStyle, Data, Path};
 
 
-#[proc_macro_derive(EnumFlags)]
-pub fn enum_flags(input: TokenStream) -> TokenStream {
-    let ast = parse_macro_input!(input as DeriveInput);
+
+#[proc_macro_attribute]
+pub fn enum_flags(_args: TokenStream, input: TokenStream) -> TokenStream {
+    impl_flags(parse_macro_input!(input as DeriveInput))
+}
+
+fn impl_flags(mut ast: DeriveInput) -> TokenStream {
+
     let enum_name = &ast.ident;
-    let num_size = extract_repr(&ast.attrs)
-        .unwrap()
-        .unwrap_or_else(|| syn::Ident::new("isize", enum_name.span()));
+
+    let num = if let Some(t) = extract_repr(&ast.attrs).unwrap() {
+        t
+    } else {
+        ast.attrs.push(Attribute {
+            pound_token: Default::default(),
+            style: AttrStyle::Outer,
+            bracket_token: Default::default(),
+            path: Path::from(syn::Ident::new("repr", Span::call_site())),
+            tokens: syn::parse2(quote! { (usize) }).unwrap(),
+        });
+        syn::Ident::new("usize", enum_name.span().clone())
+    };
+
+
     let vis = &ast.vis;
 
+    if let Data::Enum(ref mut data_enum) = &mut ast.data {
+        data_enum.variants.push(syn::parse2(quote! {__Composed__(#num)}).unwrap());
+
+    } else {
+        panic!("`EnumFlags` has to be used with enums");
+    }
+
     let result = match &ast.data {
-        Data::Enum(ref s) => {
-            let tmp = s.variants.iter().map(|v| & v.ident).collect::<Vec<&syn::Ident>>();
-            impl_flags(enum_name, tmp, &num_size, vis)
+        Data::Enum(ref data_enum) => {
+            let enum_items = data_enum.variants.iter()
+                .filter(|f| f.ident.to_string().ne("__Composed__"))
+                .map(|v| & v.ident)
+                .collect::<Vec<&syn::Ident>>();
+
+
+            let has_enum_items = enum_items.iter()
+                .map(|x| {
+                    let mut n = to_snake_case(&x.to_string());
+                    n.insert_str(0, "has_");
+                    syn::Ident::new(n.as_str(), enum_name.span().clone())
+                }).collect::<Vec<syn::Ident>>();
+            let enum_names = enum_items.iter()
+                .map(|x| {
+                    let mut n = enum_name.to_string();
+                    n.push_str("::");
+                    n.push_str(&x.to_string());
+                    n
+                }).collect::<Vec<String>>();
+
+
+            quote! {
+
+                #ast
+
+                impl #enum_name {
+                    #(
+                        #vis fn #has_enum_items(&self)-> bool {
+                            use #enum_name::*;
+                            self.contains(#enum_items)
+                        }
+                    )*
+                    #vis fn has_flag(&self, flag: Self) -> bool {
+                        self.contains(flag)
+                    }
+                    #vis fn is_empty(&self) -> bool {
+                        self.as_num() == 0
+                    }
+                    #vis fn is_all(&self) -> bool {
+                        use #enum_name::*;
+                        let mut v = Self::from_num(0);
+                        #(
+                            v |= #enum_items;
+                        )*
+                        *self == v
+                    }
+                    #vis fn contains(&self, flag: Self) -> bool {
+                        let a = self.as_num();
+                        let b = flag.as_num();
+                        if a == 0 {
+                            b == 0
+                        } else {
+                            (a & b) != 0
+                        }
+                    }
+                    fn from_num(n: #num) -> Self {
+                        if n != 1 && n % 2 == 1 {
+                            Self::__Composed__(n)
+                        } else {
+                            unsafe {
+                                let bytes = std::slice::from_raw_parts((&n as *const #num) as *const u8, std::mem::size_of::<#num>());
+                                std::ptr::read(bytes.as_ptr() as *const Self)
+                            }
+                        }
+                    }
+                    fn as_num(&self) -> #num {
+                        use #enum_name::__Composed__;
+                        match self {
+                            __Composed__(n) => *n,
+                            _ => unsafe { *(self as *const Self as *const #num) }
+                        }
+                    }
+                }
+
+                impl std::ops::BitOr for #enum_name {
+                    type Output = Self;
+                    fn bitor(self, rhs: Self) -> Self::Output {
+                        let a = self.as_num();
+                        let b = rhs.as_num();
+                        let c = a | b;
+                        Self::from_num(c)
+                    }
+                }
+
+                impl std::ops::BitAnd for #enum_name {
+                    type Output = Self;
+                    fn bitand(self, rhs: Self) -> Self::Output {
+                        let a = self.as_num();
+                        let b = rhs.as_num();
+                        let c = a & b;
+                        Self::from_num(c)
+                    }
+                }
+
+                impl std::ops::BitXor for #enum_name {
+                    type Output = Self;
+                    fn bitxor(self, rhs: Self) -> Self::Output {
+                        let a = self.as_num();
+                        let b = rhs.as_num();
+                        let c = a ^ b;
+                        Self::from_num(c)
+                    }
+                }
+
+                impl std::ops::Not for #enum_name {
+                    type Output = Self;
+                    fn not(self) -> Self::Output {
+                        let a = self.as_num();
+                        Self::from_num(!a)
+                    }
+                }
+
+                impl std::ops::Sub for #enum_name {
+                    type Output = Self;
+
+                    fn sub(self, rhs: Self) -> Self::Output {
+                        self & (!rhs)
+                    }
+                }
+
+                impl std::ops::BitOrAssign for #enum_name {
+                    fn bitor_assign(&mut self, rhs: Self) {
+                        *self = *self | rhs;
+                    }
+                }
+
+                impl std::ops::BitAndAssign for #enum_name {
+                    fn bitand_assign(&mut self, rhs: Self) {
+                        *self = *self & rhs;
+                    }
+                }
+
+                impl std::ops::BitXorAssign for #enum_name {
+                    fn bitxor_assign(&mut self, rhs: Self) {
+                        *self = *self ^ rhs;
+                    }
+                }
+
+                impl std::ops::SubAssign for #enum_name {
+                    fn sub_assign(&mut self, rhs: Self) {
+                        *self = *self - rhs
+                    }
+                }
+
+                impl std::fmt::Debug for #enum_name {
+                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        let mut v = Vec::new();
+                        #(
+                            if self.#has_enum_items() {
+                                v.push(#enum_names)
+                            }
+                        )*
+                        write!(f, "({})", v.join(" | "))
+                    }
+                }
+
+                impl std::cmp::PartialEq<#num> for #enum_name {
+                    fn eq(&self, other: &#num) -> bool {
+                        self.as_num() == *other
+                    }
+                }
+
+                impl std::cmp::PartialEq<#enum_name> for #num {
+                    fn eq(&self, other: &#enum_name) -> bool {
+                        *self == other.as_num()
+                    }
+                }
+
+            }
         }
-        _ => panic!("doesn't work with unions yet")
+        _ => panic!("`EnumFlags` has to be used with enums")
     };
+
     result.into()
 }
 
-
-
-fn impl_flags(enum_name: &syn::Ident, enum_items: Vec<&syn::Ident>, num: &syn::Ident, vis: &syn::Visibility) -> proc_macro2::TokenStream {
-    let has_enum_items = enum_items.iter()
-        .map(|x| {
-            let mut n = to_snake_case(&x.to_string());
-            n.insert_str(0, "has_");
-            syn::Ident::new(n.as_str(), enum_name.span())
-        }).collect::<Vec<syn::Ident>>();
-    let enum_names = enum_items.iter()
-        .map(|x| {
-            let mut n = enum_name.to_string();
-            n.push_str("::");
-            n.push_str(&x.to_string());
-            n
-        }).collect::<Vec<String>>();
-    quote! {
-        impl #enum_name {
-            fn test(&self) -> String {
-                "123".to_string()
-            }
-            #(
-                #vis fn #has_enum_items(&self)-> bool {
-                    use #enum_name::*;
-                    self.contains(#enum_items)
-                }
-            )*
-            #vis fn has_flag(&self, flag: Self) -> bool {
-                self.contains(flag)
-            }
-            #vis fn is_empty(&self) -> bool {
-                *self as #num == 0
-            }
-            #vis fn is_all(&self) -> bool {
-                use #enum_name::*;
-                let mut v = Self::from_num(0);
-                #(
-                    v |= #enum_items;
-                )*
-                *self == v
-            }
-            #vis fn contains(&self, flag: Self) -> bool {
-                let a = *self as #num;
-                let b = flag as #num;
-                if a == 0 {
-                    b == 0
-                } else {
-                    (a & b) != 0
-                }
-            }
-            fn from_num(n: #num) -> Self {
-                unsafe {
-                    let bytes = std::slice::from_raw_parts((&n as *const #num) as *const u8, std::mem::size_of::<#num>());
-                    std::ptr::read(bytes.as_ptr() as *const Self)
-                }
-            }
-        }
-
-        impl std::ops::BitOr for #enum_name {
-            type Output = Self;
-            fn bitor(self, rhs: Self) -> Self::Output {
-                let a = self as #num;
-                let b = rhs as #num;
-                let c = a | b;
-                Self::from_num(c)
-            }
-        }
-
-        impl std::ops::BitAnd for #enum_name {
-            type Output = Self;
-            fn bitand(self, rhs: Self) -> Self::Output {
-                let a = self as #num;
-                let b = rhs.clone() as #num;
-                let c = a & b;
-                Self::from_num(c)
-            }
-        }
-
-        impl std::ops::BitXor for #enum_name {
-            type Output = Self;
-            fn bitxor(self, rhs: Self) -> Self::Output {
-                let a = self as #num;
-                let b = rhs as #num;
-                let c = a ^ b;
-                Self::from_num(c)
-            }
-        }
-
-        impl std::ops::Not for #enum_name {
-            type Output = Self;
-            fn not(self) -> Self::Output {
-                let a = self as #num;
-                Self::from_num(!a)
-            }
-        }
-
-        impl std::ops::Sub for #enum_name {
-            type Output = Self;
-
-            fn sub(self, rhs: Self) -> Self::Output {
-                self & (!rhs)
-            }
-        }
-
-        impl std::ops::BitOrAssign for #enum_name {
-            fn bitor_assign(&mut self, rhs: Self) {
-                *self = *self | rhs;
-            }
-        }
-
-        impl std::ops::BitAndAssign for #enum_name {
-            fn bitand_assign(&mut self, rhs: Self) {
-                *self = *self & rhs;
-            }
-        }
-
-        impl std::ops::BitXorAssign for #enum_name {
-            fn bitxor_assign(&mut self, rhs: Self) {
-                *self = *self ^ rhs;
-            }
-        }
-
-        impl std::ops::SubAssign for #enum_name {
-            fn sub_assign(&mut self, rhs: Self) {
-                *self = *self - rhs
-            }
-        }
-
-        impl std::fmt::Debug for #enum_name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let mut v = Vec::new();
-                #(
-                    if self.#has_enum_items() {
-                        v.push(#enum_names)
-                    }
-                )*
-                write!(f, "({})", v.join(" | "))
-            }
-        }
-    }
-}
 
 fn extract_repr(attrs: &[syn::Attribute]) -> Result<Option<syn::Ident>, syn::Error> {
     use syn::{Meta, NestedMeta};
@@ -224,7 +286,6 @@ fn extract_repr(attrs: &[syn::Attribute]) -> Result<Option<syn::Ident>, syn::Err
         })
         .transpose()
 }
-
 
 fn to_snake_case(str: &str) -> String {
     let mut s = String::with_capacity(str.len());
