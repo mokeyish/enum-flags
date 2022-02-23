@@ -126,26 +126,37 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                         self.contains(flag)
                     }
                     #vis fn is_empty(&self) -> bool {
-                        self.as_num() == 0
+                        #num::from(self) == 0
                     }
                     #vis fn is_all(&self) -> bool {
                         use #enum_name::*;
-                        let mut v = Self::from_num(0);
+                        let mut v = Self::from(0);
                         #(
                             v |= #enum_items;
                         )*
                         *self == v
                     }
                     #vis fn contains(&self, flag: Self) -> bool {
-                        let a = self.as_num();
-                        let b = flag.as_num();
+                        let a: #num = self.into();
+                        let b: #num = flag.into();
                         if a == 0 {
                             b == 0
                         } else {
                             (a & b) != 0
                         }
                     }
+
                     fn from_num(n: #num) -> Self {
+                        n.into()
+                    }
+
+                    fn as_num(&self) -> #num {
+                        self.into()
+                    }
+                }
+
+                impl From<#num> for #enum_name {
+                    fn from(n: #num) -> Self {
                         if n != 1 && n % 2 == 1 {
                             Self::__Composed__(n)
                         } else {
@@ -155,50 +166,60 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                             }
                         }
                     }
-                    fn as_num(&self) -> #num {
+                }
+
+                impl From<#enum_name> for #num {
+                    #[inline]
+                    fn from(s: #enum_name) -> Self {
                         use #enum_name::__Composed__;
-                        match self {
-                            __Composed__(n) => *n,
-                            _ => unsafe { *(self as *const Self as *const #num) }
+                        match s {
+                            __Composed__(n) => n,
+                            _ => unsafe { *(&s as *const #enum_name as *const #num) }
                         }
+                    }
+                }
+
+                impl From<&#enum_name> for #num {
+                    fn from(s: &#enum_name) -> Self {
+                        (*s).into()
                     }
                 }
 
                 impl std::ops::BitOr for #enum_name {
                     type Output = Self;
                     fn bitor(self, rhs: Self) -> Self::Output {
-                        let a = self.as_num();
-                        let b = rhs.as_num();
+                        let a: #num = self.into();
+                        let b: #num = rhs.into();
                         let c = a | b;
-                        Self::from_num(c)
+                        Self::from(c)
                     }
                 }
 
                 impl std::ops::BitAnd for #enum_name {
                     type Output = Self;
                     fn bitand(self, rhs: Self) -> Self::Output {
-                        let a = self.as_num();
-                        let b = rhs.as_num();
+                        let a: #num = self.into();
+                        let b: #num = rhs.into();
                         let c = a & b;
-                        Self::from_num(c)
+                        Self::from(c)
                     }
                 }
 
                 impl std::ops::BitXor for #enum_name {
                     type Output = Self;
                     fn bitxor(self, rhs: Self) -> Self::Output {
-                        let a = self.as_num();
-                        let b = rhs.as_num();
+                        let a: #num = self.into();
+                        let b: #num = rhs.into();
                         let c = a ^ b;
-                        Self::from_num(c)
+                        Self::from(c)
                     }
                 }
 
                 impl std::ops::Not for #enum_name {
                     type Output = Self;
                     fn not(self) -> Self::Output {
-                        let a = self.as_num();
-                        Self::from_num(!a)
+                        let a: #num = self.into();
+                        Self::from(!a)
                     }
                 }
 
@@ -248,13 +269,13 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
                 impl std::cmp::PartialEq<#num> for #enum_name {
                     fn eq(&self, other: &#num) -> bool {
-                        self.as_num() == *other
+                        #num::from(self) == *other
                     }
                 }
 
                 impl std::cmp::PartialEq<#enum_name> for #num {
                     fn eq(&self, other: &#enum_name) -> bool {
-                        *self == other.as_num()
+                        *self == #num::from(other)
                     }
                 }
 
