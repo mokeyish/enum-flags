@@ -90,10 +90,19 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
     let result = match &ast.data {
         Data::Enum(ref data_enum) => {
-            let enum_items = data_enum.variants.iter()
-                .filter(|f| f.ident.to_string().ne("__Composed__"))
-                .map(|v| & v.ident)
-                .collect::<Vec<&syn::Ident>>();
+
+            let (enum_items, enum_values): (Vec<&syn::Ident>, Vec<&syn::Expr>) = data_enum.variants.iter()
+                .filter(|f| f.ident.ne("__Composed__"))
+                .map(|v| (&v.ident, &v.discriminant.as_ref().expect(r##"Enum must with explicit discriminator, e.g.:
+                enum Flags {
+                    None = 0, // 0 for none only.
+                    A = 1,
+                    B = 2,
+                    C = 4,
+                    ...
+                }
+                 "##).1))
+                .unzip();
 
 
             let has_enum_items = enum_items.iter()
@@ -102,6 +111,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     n.insert_str(0, "has_");
                     syn::Ident::new(n.as_str(), enum_name.span().clone())
                 }).collect::<Vec<syn::Ident>>();
+
             let enum_names = enum_items.iter()
                 .map(|x| {
                     let mut n = enum_name.to_string();
@@ -118,16 +128,25 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                 impl #enum_name {
                     #(
                         #vis fn #has_enum_items(&self)-> bool {
-                            use #enum_name::*;
+                            use #enum_name::#enum_items;
                             self.contains(#enum_items)
                         }
                     )*
-                    #vis fn has_flag(&self, flag: Self) -> bool {
-                        self.contains(flag)
+
+                    /// Returns `true` if all of the flags in `other` are contained within `self`.
+                    #[inline]
+                    #vis fn has_flag(&self, other: Self) -> bool {
+                        self.contains(other)
                     }
+
+                    /// Returns `true` if no flags are currently stored.
+                    #[inline]
                     #vis fn is_empty(&self) -> bool {
                         #num::from(self) == 0
                     }
+
+                    /// Returns `true` if all flags are currently set.
+                    #[inline]
                     #vis fn is_all(&self) -> bool {
                         use #enum_name::*;
                         let mut v = Self::from(0);
@@ -136,9 +155,12 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                         )*
                         *self == v
                     }
-                    #vis fn contains(&self, flag: Self) -> bool {
+
+                    /// Returns `true` if all of the flags in `other` are contained within `self`.
+                    #[inline]
+                    #vis fn contains(&self, other: Self) -> bool {
                         let a: #num = self.into();
-                        let b: #num = flag.into();
+                        let b: #num = other.into();
                         if a == 0 {
                             b == 0
                         } else {
@@ -146,10 +168,70 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                         }
                     }
 
+                    #[inline]
+                    #vis fn clear(&mut self) {
+                        *self = Self::from(0);
+                    }
+
+                    /// Inserts the specified flags in-place.
+                    #[inline]
+                    #vis fn insert(&mut self, other: Self) {
+                        *self |= other;
+                    }
+
+                    /// Removes the specified flags in-place.
+                    #[inline]
+                    #vis fn remove(&mut self, other: Self) {
+                        *self &= !other;
+                    }
+
+                    /// Inserts or removes the specified flags depending on the passed value.
+                    #[inline]
+                    #vis fn set(&mut self, other: Self, value: bool) {
+                        if value {
+                            self.insert(other);
+                        } else {
+                            self.remove(other);
+                        }
+                    }
+
+                    /// Toggles the specified flags in-place.
+                    #[inline]
+                    #vis fn toggle(&mut self, other: Self) {
+                        *self ^= other;
+                    }
+
+                    /// Returns the intersection between the flags in `self` and
+                    #[inline]
+                    #vis fn intersection(&self, other: Self) -> Self {
+                        *self & other
+                    }
+
+                    /// Returns the union of between the flags in `self` and `other`.
+                    #[inline]
+                    #vis fn union(&self, other: Self) -> Self {
+                        *self | other
+                    }
+
+                    /// Returns the difference between the flags in `self` and `other`.
+                    #[inline]
+                    #vis fn difference(&self, other: Self) -> Self {
+                        *self & !other
+                    }
+
+                    /// Returns the [symmetric difference][sym-diff] between the flags
+                    /// in `self` and `other`.
+                    #[inline]
+                    #vis fn symmetric_difference(&self, other: Self) -> Self {
+                        *self ^ other
+                    }
+
+                    #[inline]
                     fn from_num(n: #num) -> Self {
                         n.into()
                     }
 
+                    #[inline]
                     fn as_num(&self) -> #num {
                         self.into()
                     }
@@ -157,13 +239,12 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
                 impl From<#num> for #enum_name {
                     fn from(n: #num) -> Self {
-                        if n != 1 && n % 2 == 1 {
-                            Self::__Composed__(n)
-                        } else {
-                            unsafe {
-                                let bytes = std::slice::from_raw_parts((&n as *const #num) as *const u8, std::mem::size_of::<#num>());
-                                std::ptr::read(bytes.as_ptr() as *const Self)
-                            }
+                        use #enum_name::*;
+                        match n {
+                            #(
+                                #enum_values => #enum_items,
+                            )*
+                            _ => __Composed__(n)
                         }
                     }
                 }
@@ -180,6 +261,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                 }
 
                 impl From<&#enum_name> for #num {
+                    #[inline]
                     fn from(s: &#enum_name) -> Self {
                         (*s).into()
                     }
@@ -217,6 +299,8 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
                 impl std::ops::Not for #enum_name {
                     type Output = Self;
+
+                    #[inline]
                     fn not(self) -> Self::Output {
                         let a: #num = self.into();
                         Self::from(!a)
@@ -226,30 +310,35 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                 impl std::ops::Sub for #enum_name {
                     type Output = Self;
 
+                    #[inline]
                     fn sub(self, rhs: Self) -> Self::Output {
                         self & (!rhs)
                     }
                 }
 
                 impl std::ops::BitOrAssign for #enum_name {
+                    #[inline]
                     fn bitor_assign(&mut self, rhs: Self) {
                         *self = *self | rhs;
                     }
                 }
 
                 impl std::ops::BitAndAssign for #enum_name {
+                    #[inline]
                     fn bitand_assign(&mut self, rhs: Self) {
                         *self = *self & rhs;
                     }
                 }
 
                 impl std::ops::BitXorAssign for #enum_name {
+                    #[inline]
                     fn bitxor_assign(&mut self, rhs: Self) {
                         *self = *self ^ rhs;
                     }
                 }
 
                 impl std::ops::SubAssign for #enum_name {
+                    #[inline]
                     fn sub_assign(&mut self, rhs: Self) {
                         *self = *self - rhs
                     }

@@ -8,7 +8,7 @@
 
 ## Example
 
-Since use feature `arbitrary_enum_discriminant`, nightly channel is required.
+Since use the feature `arbitrary_enum_discriminant`, **nightly channel** is required.
 
 ```rust
 #![feature(arbitrary_enum_discriminant)]

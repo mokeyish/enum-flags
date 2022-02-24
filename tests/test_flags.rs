@@ -124,7 +124,7 @@ fn test_union(){
     }
 
     let e1 = Flags::A | Flags::C;
-    let e2 = Flags::B | Flags::C;
+    let e2 = Flags::B.union(Flags::C);
     assert_eq!(e1 | e2, Flags::A | Flags::B | Flags::C) // union
 }
 
@@ -142,7 +142,8 @@ fn test_intersection(){
 
     let e1 = Flags::A | Flags::C;
     let e2 = Flags::B | Flags::C;
-    assert_eq!(e1 & e2, Flags::C) // intersection
+    assert_eq!(e1 & e2, Flags::C); // intersection
+    assert_eq!(e1.intersection(e2), Flags::C) // intersection
 }
 
 #[test]
@@ -176,9 +177,11 @@ fn test_deletion(){
     }
 
 
-    let e1 = Flags::A | Flags::C;
+    let mut e1 = Flags::A | Flags::C;
     assert_eq!(e1 & (!Flags::C), Flags::A.as_num());
     assert_eq!(e1 - Flags::C , Flags::A);
+    e1.remove(Flags::C);
+    assert_eq!(e1, Flags::A);
 }
 
 
@@ -254,4 +257,86 @@ fn test_contains(){
 
     let e1 = Flags::None;
     assert!(e1.contains(Flags::None));
+}
+
+
+#[test]
+fn test_clear(){
+    #[repr(u32)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
+    enum Flags{
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4
+    }
+
+    let mut e1 = Flags::A | Flags::C;
+    e1.clear();
+    assert_eq!(e1, Flags::None);
+}
+
+#[test]
+fn test_insert(){
+    #[repr(u32)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
+    enum Flags{
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4
+    }
+
+    let mut e1 = Flags::A;
+    e1.insert(Flags::B);
+    assert_eq!("(Flags::A | Flags::B)", format!("{:?}", e1));
+
+
+    let mut e1 = Flags::None;
+    e1.insert(Flags::B);
+    assert_eq!("(Flags::B)", format!("{:?}", e1));
+}
+
+
+#[test]
+fn test_remove(){
+    #[repr(u32)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
+    enum Flags{
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4
+    }
+
+    let mut e1 = Flags::A;
+    e1.insert(Flags::B);
+    assert_eq!("(Flags::A | Flags::B)", format!("{:?}", e1));
+    e1.remove(Flags::A);
+    assert_eq!("(Flags::B)", format!("{:?}", e1));
+}
+
+
+#[test]
+fn test_toggle(){
+    #[repr(u32)]
+    #[enum_flags]
+    #[derive(Copy, Clone, PartialEq)]
+    enum Flags{
+        None = 0,
+        A = 1,
+        B = 2,
+        C = 4
+    }
+
+    let mut e1 = Flags::A;
+    e1.insert(Flags::B);
+    assert_eq!("(Flags::A | Flags::B)", format!("{:?}", e1));
+    e1.toggle(Flags::B);
+    assert_eq!("(Flags::A)", format!("{:?}", e1));
+    e1.toggle(Flags::B);
+    assert_eq!("(Flags::A | Flags::B)", format!("{:?}", e1));
 }
