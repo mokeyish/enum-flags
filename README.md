@@ -14,13 +14,13 @@ Since use the feature `arbitrary_enum_discriminant`, **nightly channel** is requ
 #![feature(arbitrary_enum_discriminant)]
 use enum_flags::enum_flags;
 
-#[repr(u8)]
+#[repr(u8)]  // default: #[repr(usize)]
 #[enum_flags]
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq)] // can be omitted
 enum Flags{
     None = 0,
     A = 1,
-    B = 2,
+    B, // 2
     C = 4
 }
 fn main() {
@@ -57,7 +57,7 @@ fn main() {
 - before version 0.18
   ```rust
   #[derive(Copy, EnumFlags, Clone, PartialEq)]
-  enum Flags{
+  enum Flags {
       None = 0,
       A = 1,
       B = 2,

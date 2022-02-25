@@ -8,13 +8,13 @@
 //! #![feature(arbitrary_enum_discriminant)]
 //! use enum_flags::enum_flags;
 //!
-//! #[repr(u8)]
+//! #[repr(u8)]  // default: #[repr(usize)]
 //! #[enum_flags]
-//! #[derive(Copy, Clone, PartialEq)]
+//! #[derive(Copy, Clone, PartialEq)]   // can be omitted
 //! enum Flags{
 //!     None = 0,
 //!     A = 1,
-//!     B = 2,
+//!     B, // 2
 //!     C = 4
 //! }
 //! fn main() {
@@ -46,15 +46,13 @@
 
 extern crate proc_macro;
 
+use syn::{AttrStyle, Attribute, Data, Expr, ExprLit, Ident, Lit, LitInt, Meta, NestedMeta, Path};
 use {
-    syn::{DeriveInput, parse_macro_input},
-    quote::*,
+    self::proc_macro::TokenStream,
     proc_macro2::{self, Span},
-    self::proc_macro::TokenStream
+    quote::*,
+    syn::{parse_macro_input, DeriveInput},
 };
-use syn::{Attribute, AttrStyle, Data, Path};
-
-
 
 #[proc_macro_attribute]
 pub fn enum_flags(_args: TokenStream, input: TokenStream) -> TokenStream {
@@ -62,11 +60,10 @@ pub fn enum_flags(_args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 fn impl_flags(mut ast: DeriveInput) -> TokenStream {
-
     let enum_name = &ast.ident;
 
-    let num = if let Some(t) = extract_repr(&ast.attrs).unwrap() {
-        t
+    let num = if let Some(repr) = extract_repr(&ast.attrs) {
+        repr
     } else {
         ast.attrs.push(Attribute {
             pound_token: Default::default(),
@@ -75,51 +72,99 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
             path: Path::from(syn::Ident::new("repr", Span::call_site())),
             tokens: syn::parse2(quote! { (usize) }).unwrap(),
         });
-        syn::Ident::new("usize", enum_name.span().clone())
+        syn::Ident::new("usize", Span::call_site())
     };
-
 
     let vis = &ast.vis;
 
     if let Data::Enum(ref mut data_enum) = &mut ast.data {
-        data_enum.variants.push(syn::parse2(quote! {__Composed__(#num)}).unwrap());
+        let mut i = 0;
 
+        for variant in &mut data_enum.variants {
+            if let Some((_, ref expr)) = variant.discriminant {
+                i = if let Expr::Lit(ExprLit {
+                    lit: Lit::Int(ref lit_int),
+                    ..
+                }) = expr
+                {
+                    lit_int
+                        .to_string()
+                        .parse::<u128>()
+                        .expect("Invalid literal")
+                        + 1
+                } else {
+                    panic!("Unsupported discriminant type, only integer are supported.")
+                }
+            } else {
+                // println!("{}:{}", variant.ident, i);
+                variant.discriminant = Some((
+                    syn::token::Eq(Span::call_site()),
+                    Expr::Lit(ExprLit {
+                        lit: Lit::Int(LitInt::new(i.to_string().as_str(), Span::call_site())),
+                        attrs: vec![],
+                    }),
+                ));
+                i += 1;
+            }
+        }
+
+        data_enum
+            .variants
+            .push(syn::parse2(quote! {__Composed__(#num)}).unwrap());
     } else {
         panic!("`EnumFlags` has to be used with enums");
     }
 
+
+
+    // try to derive Copy,Clone,PartialEq automatically
+    {
+        let dervies = extract_derives(&ast.attrs);
+
+        let dervies = ["Copy", "Clone", "PartialEq"]
+            .iter()
+            .filter(|x| dervies.iter().all(|d| d.ne(x)))
+            .map(|x| Ident::new(x, Span::call_site()))
+            .collect::<Vec<_>>();
+
+        if dervies.len() > 0 {
+            ast.attrs.push(Attribute {
+                pound_token: Default::default(),
+                style: AttrStyle::Outer,
+                bracket_token: Default::default(),
+                path: Path::from(syn::Ident::new("derive", Span::call_site())),
+                tokens: syn::parse2(quote! { (#(#dervies),* )}).unwrap(),
+            });
+        }
+    }
+
     let result = match &ast.data {
         Data::Enum(ref data_enum) => {
-
-            let (enum_items, enum_values): (Vec<&syn::Ident>, Vec<&syn::Expr>) = data_enum.variants.iter()
+            let (enum_items, enum_values): (Vec<&syn::Ident>, Vec<&syn::Expr>) = data_enum
+                .variants
+                .iter()
                 .filter(|f| f.ident.ne("__Composed__"))
-                .map(|v| (&v.ident, &v.discriminant.as_ref().expect(r##"Enum must with explicit discriminator, e.g.:
-                enum Flags {
-                    None = 0, // 0 for none only.
-                    A = 1,
-                    B = 2,
-                    C = 4,
-                    ...
-                }
-                 "##).1))
+                .map(|v| (&v.ident, &v.discriminant.as_ref().expect("").1))
                 .unzip();
 
-
-            let has_enum_items = enum_items.iter()
+            let has_enum_items = enum_items
+                .iter()
                 .map(|x| {
                     let mut n = to_snake_case(&x.to_string());
                     n.insert_str(0, "has_");
-                    syn::Ident::new(n.as_str(), enum_name.span().clone())
-                }).collect::<Vec<syn::Ident>>();
+                    Ident::new(n.as_str(), enum_name.span().clone())
+                })
+                .collect::<Vec<syn::Ident>>();
 
-            let enum_names = enum_items.iter()
+            let enum_names = enum_items
+                .iter()
                 .map(|x| {
                     let mut n = enum_name.to_string();
                     n.push_str("::");
                     n.push_str(&x.to_string());
                     n
-                }).collect::<Vec<String>>();
-
+                })
+                .collect::<Vec<String>>();
 
             quote! {
 
@@ -127,9 +172,9 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
                 impl #enum_name {
                     #(
+                        #[inline]
                         #vis fn #has_enum_items(&self)-> bool {
-                            use #enum_name::#enum_items;
-                            self.contains(#enum_items)
+                            self.contains(#enum_name::#enum_items)
                         }
                     )*
 
@@ -227,17 +272,18 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     }
 
                     #[inline]
-                    fn from_num(n: #num) -> Self {
+                    #vis fn from_num(n: #num) -> Self {
                         n.into()
                     }
 
                     #[inline]
-                    fn as_num(&self) -> #num {
+                    #vis fn as_num(&self) -> #num {
                         self.into()
                     }
                 }
 
                 impl From<#num> for #enum_name {
+                    #[inline]
                     fn from(n: #num) -> Self {
                         use #enum_name::*;
                         match n {
@@ -269,6 +315,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
                 impl std::ops::BitOr for #enum_name {
                     type Output = Self;
+                    #[inline]
                     fn bitor(self, rhs: Self) -> Self::Output {
                         let a: #num = self.into();
                         let b: #num = rhs.into();
@@ -279,6 +326,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
                 impl std::ops::BitAnd for #enum_name {
                     type Output = Self;
+                    #[inline]
                     fn bitand(self, rhs: Self) -> Self::Output {
                         let a: #num = self.into();
                         let b: #num = rhs.into();
@@ -289,6 +337,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
                 impl std::ops::BitXor for #enum_name {
                     type Output = Self;
+                    #[inline]
                     fn bitxor(self, rhs: Self) -> Self::Output {
                         let a: #num = self.into();
                         let b: #num = rhs.into();
@@ -345,6 +394,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                 }
 
                 impl std::fmt::Debug for #enum_name {
+                    #[inline]
                     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
                         let mut v = Vec::new();
                         #(
@@ -357,12 +407,14 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                 }
 
                 impl std::cmp::PartialEq<#num> for #enum_name {
+                    #[inline]
                     fn eq(&self, other: &#num) -> bool {
                         #num::from(self) == *other
                     }
                 }
 
                 impl std::cmp::PartialEq<#enum_name> for #num {
+                    #[inline]
                     fn eq(&self, other: &#enum_name) -> bool {
                         *self == #num::from(other)
                     }
@@ -370,31 +422,45 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
 
             }
         }
-        _ => panic!("`EnumFlags` has to be used with enums")
+        _ => panic!("`EnumFlags` has to be used with enums"),
     };
 
     result.into()
 }
 
-
-fn extract_repr(attrs: &[syn::Attribute]) -> Result<Option<syn::Ident>, syn::Error> {
-    use syn::{Meta, NestedMeta};
+fn extract_repr(attrs: &[Attribute]) -> Option<Ident> {
     attrs
         .iter()
         .find_map(|attr| match attr.parse_meta() {
-            Err(why) => Some(Err(syn::Error::new_spanned(
+            Err(why) => panic!("{:?}", syn::Error::new_spanned(
                 attr,
                 format!("Couldn't parse attribute: {}", why),
-            ))),
+            )),
             Ok(Meta::List(ref meta)) if meta.path.is_ident("repr") => {
                 meta.nested.iter().find_map(|mi| match mi {
-                    NestedMeta::Meta(Meta::Path(path)) => path.get_ident().cloned().map(Ok),
+                    NestedMeta::Meta(Meta::Path(path)) => path.get_ident().cloned(),
                     _ => None,
                 })
             }
             Ok(_) => None,
         })
-        .transpose()
+}
+
+fn extract_derives(attrs: &[Attribute]) -> Vec<Ident> {
+    attrs
+        .iter()
+        .flat_map(|attr| attr.parse_meta())
+        .flat_map(|ref meta| match meta {
+            Meta::List(ref meta) if meta.path.is_ident("derive") => {
+                meta.nested.iter().filter_map(|mi| match mi {
+                    NestedMeta::Meta(Meta::Path(path)) => path.get_ident().cloned(),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+            }
+            _ => Default::default(),
+        })
+        .collect::<Vec<_>>()
 }
 
 fn to_snake_case(str: &str) -> String {

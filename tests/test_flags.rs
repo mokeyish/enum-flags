@@ -17,6 +17,8 @@ fn test_bitor(){
 
     let s: State = State::A | State::B;
 
+    s.has_a();
+
     assert_eq!("(State::A | State::B)", format!("{:?}", s).as_str())
 }
 
@@ -64,7 +66,8 @@ fn test_has_flag2(){
 
 
     #[enum_flags]
-    #[derive(Copy, Clone, PartialEq)]
+    #[derive(Clone, PartialEq)]
+    #[derive(Copy)]
     enum State {
         None= 0,
         A = 1,
@@ -338,5 +341,20 @@ fn test_toggle(){
     e1.toggle(Flags::B);
     assert_eq!("(Flags::A)", format!("{:?}", e1));
     e1.toggle(Flags::B);
+    assert_eq!("(Flags::A | Flags::B)", format!("{:?}", e1));
+}
+
+#[test]
+fn test_omit_derives(){
+    #[enum_flags]
+    enum Flags{
+        None = 0,
+        A,
+        B = 2,
+        C = 4
+    }
+
+    let mut e1 = Flags::A;
+    e1.insert(Flags::B);
     assert_eq!("(Flags::A | Flags::B)", format!("{:?}", e1));
 }
