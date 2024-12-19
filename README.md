@@ -5,6 +5,8 @@
 
 > EnumFlags is a [csharp](https://docs.microsoft.com/en-us/dotnet/api/system.flagsattribute?view=net-5.0) like enum flags implementation.
 
+The generated code is `no_std` compatible.
+
 
 ## Example
 
