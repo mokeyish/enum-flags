@@ -3,6 +3,8 @@
 //!
 //! EnumFlags is a csharp like enum flags implementation.
 //!
+//! The generated code is `no_std` compatible.
+//!
 //! # Example
 //! ```rust
 //! #![feature(arbitrary_enum_discriminant)]
@@ -313,7 +315,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                impl std::ops::BitOr for #enum_name {
+                impl core::ops::BitOr for #enum_name {
                     type Output = Self;
                     #[inline]
                     fn bitor(self, rhs: Self) -> Self::Output {
@@ -324,7 +326,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                impl std::ops::BitAnd for #enum_name {
+                impl core::ops::BitAnd for #enum_name {
                     type Output = Self;
                     #[inline]
                     fn bitand(self, rhs: Self) -> Self::Output {
@@ -335,7 +337,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                impl std::ops::BitXor for #enum_name {
+                impl core::ops::BitXor for #enum_name {
                     type Output = Self;
                     #[inline]
                     fn bitxor(self, rhs: Self) -> Self::Output {
@@ -346,7 +348,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                impl std::ops::Not for #enum_name {
+                impl core::ops::Not for #enum_name {
                     type Output = Self;
 
                     #[inline]
@@ -356,7 +358,7 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                impl std::ops::Sub for #enum_name {
+                impl core::ops::Sub for #enum_name {
                     type Output = Self;
 
                     #[inline]
@@ -365,55 +367,60 @@ fn impl_flags(mut ast: DeriveInput) -> TokenStream {
                     }
                 }
 
-                impl std::ops::BitOrAssign for #enum_name {
+                impl core::ops::BitOrAssign for #enum_name {
                     #[inline]
                     fn bitor_assign(&mut self, rhs: Self) {
                         *self = *self | rhs;
                     }
                 }
 
-                impl std::ops::BitAndAssign for #enum_name {
+                impl core::ops::BitAndAssign for #enum_name {
                     #[inline]
                     fn bitand_assign(&mut self, rhs: Self) {
                         *self = *self & rhs;
                     }
                 }
 
-                impl std::ops::BitXorAssign for #enum_name {
+                impl core::ops::BitXorAssign for #enum_name {
                     #[inline]
                     fn bitxor_assign(&mut self, rhs: Self) {
                         *self = *self ^ rhs;
                     }
                 }
 
-                impl std::ops::SubAssign for #enum_name {
+                impl core::ops::SubAssign for #enum_name {
                     #[inline]
                     fn sub_assign(&mut self, rhs: Self) {
                         *self = *self - rhs
                     }
                 }
 
-                impl std::fmt::Debug for #enum_name {
-                    #[inline]
-                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                        let mut v = Vec::new();
+                impl core::fmt::Debug for #enum_name {
+                    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                        let mut first = true;
+                        write!(f, "(")?;
                         #(
                             if self.#has_enum_items() {
-                                v.push(#enum_names)
+                                if first {
+                                    first = false;
+                                }else {
+                                    write!(f, " | ")?;
+                                }
+                                write!(f, "{}", #enum_names)?;
                             }
                         )*
-                        write!(f, "({})", v.join(" | "))
+                        write!(f, ")")
                     }
                 }
 
-                impl std::cmp::PartialEq<#num> for #enum_name {
+                impl core::cmp::PartialEq<#num> for #enum_name {
                     #[inline]
                     fn eq(&self, other: &#num) -> bool {
                         #num::from(self) == *other
                     }
                 }
 
-                impl std::cmp::PartialEq<#enum_name> for #num {
+                impl core::cmp::PartialEq<#enum_name> for #num {
                     #[inline]
                     fn eq(&self, other: &#enum_name) -> bool {
                         *self == #num::from(other)
